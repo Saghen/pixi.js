@@ -121,7 +121,7 @@ export default class ParticleRenderer extends ObjectRenderer
             buffers = container._buffers = this.generateBuffers(container);
         }
 
-        const baseTexture = children[0]._texture.baseTexture;
+        const baseTexture = children.get(0)._texture.baseTexture;
 
         // if the uvs have not updated then no point rendering just yet!
         this.renderer.state.setBlendMode(correctBlendMode(container.blendMode, baseTexture.premultiplyAlpha));
@@ -239,7 +239,7 @@ export default class ParticleRenderer extends ObjectRenderer
 
         for (let i = 0; i < amount; ++i)
         {
-            const sprite = children[startIndex + i];
+            const sprite = children.get(startIndex + i);
             const texture = sprite._texture;
             const sx = sprite.scale.x;
             const sy = sprite.scale.y;
@@ -295,7 +295,7 @@ export default class ParticleRenderer extends ObjectRenderer
     {
         for (let i = 0; i < amount; i++)
         {
-            const spritePosition = children[startIndex + i].position;
+            const spritePosition = children.get(startIndex + i).position;
 
             array[offset] = spritePosition.x;
             array[offset + 1] = spritePosition.y;
@@ -327,7 +327,7 @@ export default class ParticleRenderer extends ObjectRenderer
     {
         for (let i = 0; i < amount; i++)
         {
-            const spriteRotation = children[startIndex + i].rotation;
+            const spriteRotation = children.get(startIndex + i).rotation;
 
             array[offset] = spriteRotation;
             array[offset + stride] = spriteRotation;
@@ -352,7 +352,7 @@ export default class ParticleRenderer extends ObjectRenderer
     {
         for (let i = 0; i < amount; ++i)
         {
-            const textureUvs = children[startIndex + i]._texture._uvs;
+            const textureUvs = children.get(startIndex + i)._texture._uvs;
 
             if (textureUvs)
             {
@@ -404,7 +404,7 @@ export default class ParticleRenderer extends ObjectRenderer
     {
         for (let i = 0; i < amount; ++i)
         {
-            const sprite = children[startIndex + i];
+            const sprite = children.get(startIndex + i);
             const premultiplied = sprite._texture.baseTexture.premultiplyAlpha;
             const alpha = sprite.alpha;
             // we dont call extra function if alpha is 1.0, that's faster

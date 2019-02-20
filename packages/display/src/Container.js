@@ -2,15 +2,7 @@ import { settings } from '@pixi/settings';
 import removeItems from 'remove-array-items';
 import DisplayObject from './DisplayObject';
 
-function sortChildren(a, b)
-{
-    if (a.zIndex === b.zIndex)
-    {
-        return a._lastSortedIndex - b._lastSortedIndex;
-    }
-
-    return a.zIndex - b.zIndex;
-}
+let Deque = require('double-ended-queue');
 
 /**
  * A Container represents a collection of display objects.
@@ -38,7 +30,7 @@ export default class Container extends DisplayObject
          * @member {PIXI.DisplayObject[]}
          * @readonly
          */
-        this.children = [];
+        this.children = new Deque([]);
 
         /**
          * If set to true, the container will sort its children by zIndex value
@@ -100,12 +92,6 @@ export default class Container extends DisplayObject
         }
         else
         {
-            // if the child has a parent then lets remove it as PixiJS objects can only exist in one place
-            if (child.parent)
-            {
-                child.parent.removeChild(child);
-            }
-
             child.parent = this;
             this.sortDirty = true;
 
@@ -126,64 +112,6 @@ export default class Container extends DisplayObject
     }
 
     /**
-     * Adds a child to the container at a specified index. If the index is out of bounds an error will be thrown
-     *
-     * @param {PIXI.DisplayObject} child - The child to add
-     * @param {number} index - The index to place the child in
-     * @return {PIXI.DisplayObject} The child that was added.
-     */
-    addChildAt(child, index)
-    {
-        if (index < 0 || index > this.children.length)
-        {
-            throw new Error(`${child}addChildAt: The index ${index} supplied is out of bounds ${this.children.length}`);
-        }
-
-        if (child.parent)
-        {
-            child.parent.removeChild(child);
-        }
-
-        child.parent = this;
-        this.sortDirty = true;
-
-        // ensure child transform will be recalculated
-        child.transform._parentID = -1;
-
-        this.children.splice(index, 0, child);
-
-        // ensure bounds will be recalculated
-        this._boundsID++;
-
-        // TODO - lets either do all callbacks or all events.. not both!
-        this.onChildrenChange(index);
-        child.emit('added', this);
-
-        return child;
-    }
-
-    /**
-     * Swaps the position of 2 Display Objects within this container.
-     *
-     * @param {PIXI.DisplayObject} child - First display object to swap
-     * @param {PIXI.DisplayObject} child2 - Second display object to swap
-     */
-    swapChildren(child, child2)
-    {
-        if (child === child2)
-        {
-            return;
-        }
-
-        const index1 = this.getChildIndex(child);
-        const index2 = this.getChildIndex(child2);
-
-        this.children[index1] = child2;
-        this.children[index2] = child;
-        this.onChildrenChange(index1 < index2 ? index1 : index2);
-    }
-
-    /**
      * Returns the index position of a child DisplayObject instance
      *
      * @param {PIXI.DisplayObject} child - The DisplayObject instance to identify
@@ -191,7 +119,9 @@ export default class Container extends DisplayObject
      */
     getChildIndex(child)
     {
+        this.children = this.children.toArray();
         const index = this.children.indexOf(child);
+        this.children = new Deque(this.children);
 
         if (index === -1)
         {
@@ -199,27 +129,6 @@ export default class Container extends DisplayObject
         }
 
         return index;
-    }
-
-    /**
-     * Changes the position of an existing child in the display object container
-     *
-     * @param {PIXI.DisplayObject} child - The child DisplayObject instance for which you want to change the index number
-     * @param {number} index - The resulting index number for the child display object
-     */
-    setChildIndex(child, index)
-    {
-        if (index < 0 || index >= this.children.length)
-        {
-            throw new Error(`The index ${index} supplied is out of bounds ${this.children.length}`);
-        }
-
-        const currentIndex = this.getChildIndex(child);
-
-        removeItems(this.children, currentIndex, 1); // remove from old position
-        this.children.splice(index, 0, child); // add at new position
-
-        this.onChildrenChange(index);
     }
 
     /**
@@ -235,147 +144,7 @@ export default class Container extends DisplayObject
             throw new Error(`getChildAt: Index (${index}) does not exist.`);
         }
 
-        return this.children[index];
-    }
-
-    /**
-     * Removes one or more children from the container.
-     *
-     * @param {...PIXI.DisplayObject} child - The DisplayObject(s) to remove
-     * @return {PIXI.DisplayObject} The first child that was removed.
-     */
-    removeChild(child)
-    {
-        const argumentsLength = arguments.length;
-
-        // if there is only one argument we can bypass looping through the them
-        if (argumentsLength > 1)
-        {
-            // loop through the arguments property and add all children
-            // use it the right way (.length and [i]) so that this function can still be optimized by JS runtimes
-            for (let i = 0; i < argumentsLength; i++)
-            {
-                this.removeChild(arguments[i]);
-            }
-        }
-        else
-        {
-            const index = this.children.indexOf(child);
-
-            if (index === -1) return null;
-
-            child.parent = null;
-            // ensure child transform will be recalculated
-            child.transform._parentID = -1;
-            removeItems(this.children, index, 1);
-
-            // ensure bounds will be recalculated
-            this._boundsID++;
-
-            // TODO - lets either do all callbacks or all events.. not both!
-            this.onChildrenChange(index);
-            child.emit('removed', this);
-        }
-
-        return child;
-    }
-
-    /**
-     * Removes a child from the specified index position.
-     *
-     * @param {number} index - The index to get the child from
-     * @return {PIXI.DisplayObject} The child that was removed.
-     */
-    removeChildAt(index)
-    {
-        const child = this.getChildAt(index);
-
-        // ensure child transform will be recalculated..
-        child.parent = null;
-        child.transform._parentID = -1;
-        removeItems(this.children, index, 1);
-
-        // ensure bounds will be recalculated
-        this._boundsID++;
-
-        // TODO - lets either do all callbacks or all events.. not both!
-        this.onChildrenChange(index);
-        child.emit('removed', this);
-
-        return child;
-    }
-
-    /**
-     * Removes all children from this container that are within the begin and end indexes.
-     *
-     * @param {number} [beginIndex=0] - The beginning position.
-     * @param {number} [endIndex=this.children.length] - The ending position. Default value is size of the container.
-     * @returns {DisplayObject[]} List of removed children
-     */
-    removeChildren(beginIndex = 0, endIndex)
-    {
-        const begin = beginIndex;
-        const end = typeof endIndex === 'number' ? endIndex : this.children.length;
-        const range = end - begin;
-        let removed;
-
-        if (range > 0 && range <= end)
-        {
-            removed = this.children.splice(begin, range);
-
-            for (let i = 0; i < removed.length; ++i)
-            {
-                removed[i].parent = null;
-                if (removed[i].transform)
-                {
-                    removed[i].transform._parentID = -1;
-                }
-            }
-
-            this._boundsID++;
-
-            this.onChildrenChange(beginIndex);
-
-            for (let i = 0; i < removed.length; ++i)
-            {
-                removed[i].emit('removed', this);
-            }
-
-            return removed;
-        }
-        else if (range === 0 && this.children.length === 0)
-        {
-            return [];
-        }
-
-        throw new RangeError('removeChildren: numeric values are outside the acceptable range.');
-    }
-
-    /**
-     * Sorts children by zIndex. Previous order is mantained for 2 children with the same zIndex.
-     */
-    sortChildren()
-    {
-        let sortRequired = false;
-
-        for (let i = 0, j = this.children.length; i < j; ++i)
-        {
-            const child = this.children[i];
-
-            child._lastSortedIndex = i;
-
-            if (!sortRequired && child.zIndex !== 0)
-            {
-                sortRequired = true;
-            }
-        }
-
-        if (sortRequired && this.children.length > 1)
-        {
-            this.children.sort(sortChildren);
-        }
-
-        this.sortDirty = false;
+        return this.children.get(index);
     }
 
     /**
@@ -397,7 +166,7 @@ export default class Container extends DisplayObject
 
         for (let i = 0, j = this.children.length; i < j; ++i)
         {
-            const child = this.children[i];
+            const child = this.children.get(i);
 
             if (child.visible)
             {
@@ -418,7 +187,7 @@ export default class Container extends DisplayObject
 
         for (let i = 0; i < this.children.length; i++)
         {
-            const child = this.children[i];
+            const child = this.children.get(i);
 
             if (!child.visible || !child.renderable)
             {
@@ -482,7 +251,7 @@ export default class Container extends DisplayObject
             // simple render children!
             for (let i = 0, j = this.children.length; i < j; ++i)
             {
-                this.children[i].render(renderer);
+                this.children.get(i).render(renderer);
             }
         }
     }
@@ -535,7 +304,7 @@ export default class Container extends DisplayObject
         // now loop through the children and make sure they get rendered
         for (let i = 0, j = this.children.length; i < j; i++)
         {
-            this.children[i].render(renderer);
+            this.children.get(i).render(renderer);
         }
 
         renderer.batch.flush();
@@ -560,38 +329,6 @@ export default class Container extends DisplayObject
     _render(renderer) // eslint-disable-line no-unused-vars
     {
         // this is where content itself gets rendered...
-    }
-
-    /**
-     * Removes all internal references and listeners as well as removes children from the display list.
-     * Do not use a Container after calling `destroy`.
-     *
-     * @param {object|boolean} [options] - Options parameter. A boolean will act as if all options
-     *  have been set to that value
-     * @param {boolean} [options.children=false] - if set to true, all the children will have their destroy
-     *  method called as well. 'options' will be passed on to those calls.
-     * @param {boolean} [options.texture=false] - Only used for child Sprites if options.children is set to true
-     *  Should it destroy the texture of the child sprite
-     * @param {boolean} [options.baseTexture=false] - Only used for child Sprites if options.children is set to true
-     *  Should it destroy the base texture of the child sprite
-     */
-    destroy(options)
-    {
-        super.destroy();
-
-        this.sortDirty = false;
-
-        const destroyChildren = typeof options === 'boolean' ? options : options && options.children;
-
-        const oldChildren = this.removeChildren(0, this.children.length);
-
-        if (destroyChildren)
-        {
-            for (let i = 0; i < oldChildren.length; ++i)
-            {
-                oldChildren[i].destroy(options);
-            }
-        }
     }
 
     /**
