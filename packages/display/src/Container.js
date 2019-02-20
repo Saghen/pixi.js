@@ -1,8 +1,7 @@
 import { settings } from '@pixi/settings';
-import removeItems from 'remove-array-items';
 import DisplayObject from './DisplayObject';
 
-let Deque = require('double-ended-queue');
+const Deque = require('double-ended-queue');
 
 /**
  * A Container represents a collection of display objects.
@@ -121,6 +120,7 @@ export default class Container extends DisplayObject
     {
         this.children = this.children.toArray();
         const index = this.children.indexOf(child);
+
         this.children = new Deque(this.children);
 
         if (index === -1)
